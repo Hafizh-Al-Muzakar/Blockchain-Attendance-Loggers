@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Blockchain Attendance System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SweetAlert -->
+    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
+
+    <style>
+        body {
+            background: linear-gradient(160deg, #0f172a, #1e293b, #0f172a);
+            min-height: 100vh;
+            font-family: "Inter", sans-serif;
+        }
+    </style>
+</head>
+
+<body class="text-slate-200">
+
+    <!-- HEADER -->
+    <header class="text-center py-10">
+        <h1 class="text-4xl font-extrabold text-blue-400 tracking-wider">
+            ⛓️ Blockchain Attendance
+        </h1>
+        <p class="text-slate-400 pt-1">Secure • Transparent • Permanent</p>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="max-w-6xl mx-auto grid md:grid-cols-2 gap-6 px-4 pb-20">
+
+        <!-- ================== PANEL RECORD ================== -->
+        <section class="bg-slate-800/70 shadow-xl p-6 rounded-xl backdrop-blur-md">
+            <h2 class="text-xl font-bold mb-4">📝 Record Attendance</h2>
+
+            <div class="space-y-3">
+                <input id="name" class="w-full px-3 py-2 rounded bg-slate-700" placeholder="Name" />
+
+                <input id="student_id" class="w-full px-3 py-2 rounded bg-slate-700"
+                    placeholder="Student ID (unique)" />
+
+                <input id="date" type="date" class="w-full px-3 py-2 rounded bg-slate-700" />
+
+                <select id="present" class="w-full px-3 py-2 rounded bg-slate-700">
+                    <option value="true">Present</option>
+                    <option value="false">Absent</option>
+                </select>
+
+                <textarea id="reason" class="w-full px-3 py-2 rounded bg-slate-700"
+                    placeholder="Reason (required if Absent)" disabled></textarea>
+
+                <button onclick="submitAttendance()"
+                    class="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold">
+                    ⭐ Submit Attendance
+                </button>
+            </div>
+        </section>
+
+        <!-- ================== PANEL VERIFIKASI ================== -->
+        <section class="bg-slate-800/70 shadow-xl p-6 rounded-xl backdrop-blur-md">
+            <h2 class="text-xl font-bold mb-4">🔍 Verify Attendance</h2>
+
+            <div class="space-y-3">
+                <input id="v_student" class="w-full px-3 py-2 rounded bg-slate-700" placeholder="Student ID" />
+
+                <input id="v_date" type="date" class="w-full px-3 py-2 rounded bg-slate-700" />
+
+                <button onclick="verifyAttendance()"
+                    class="w-full py-2 px-4 bg-emerald-500 hover:bg-emerald-600 rounded-lg font-semibold">
+                    🔎 Verify
+                </button>
+            </div>
+
+            <div class="mt-6 p-4 bg-slate-900 rounded text-sm space-y-2" id="verify_box">
+                <span class="text-slate-500">Result will appear here...</span>
+            </div>
+        </section>
+    </main>
+
+
+    <!-- ================= LOGIC ================= -->
+    <script>
+        const API = "http://127.0.0.1:5000";
+
+        function toUnix(date) {
+            return Math.floor(new Date(date).getTime() / 1000);
+        }
+
+        // Enable / Disable reason
+        const presentSelect = document.querySelector("#present");
+        const reasonBox = document.querySelector("#reason");
+
+        presentSelect.addEventListener("change", () => {
+            const isPresent = presentSelect.value === "true";
+            reasonBox.disabled = isPresent;
+            if (isPresent) reasonBox.value = "";
+        });
+
+        // ============= RECORD =============
+        async function submitAttendance() {
+            const name = document.querySelector("#name").value.trim();
+            const student_id = document.querySelector("#student_id").value.trim();
+            const date = document.querySelector("#date").value;
+            const is_present = presentSelect.value === "true";
+            const reason = reasonBox.value.trim();
+
+            if (!name || !student_id || !date) {
+                swal("Warning", "All fields except reason must be filled!", "warning");
+                return;
+            }
+
+            if (!is_present && reason === "") {
+                swal("Warning", "Reason is required for absence", "warning");
+                return;
+            }
+
+            const payload = {
+                name: name,
+                student_id: student_id,
+                date: toUnix(date),
+                is_present: is_present,
+                reason: reason
+            };
+
+            swal("Processing...", "Sending transaction to blockchain...", "info");
+
+            try {
+                const res = await fetch(`${API}/log`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (data.tx) {
+                    swal("Success",
+                        "Attendance Recorded Successfully\nTX: " + data.tx,
+                        "success"
+                    );
+                } else {
+                    swal("Error", JSON.stringify(data), "error");
+                }
+
+            } catch (err) {
+                swal("Failed", err.message, "error");
+            }
+        }
+
+        // ============= VERIFY =============
+        async function verifyAttendance() {
+            const student = document.querySelector("#v_student").value.trim();
+            const date = document.querySelector("#v_date").value;
+            const box = document.querySelector("#verify_box");
+
+            if (!student || !date) {
+                swal("Warning", "Please fill both fields", "warning");
+                return;
+            }
+
+            box.innerHTML = "<p class='text-blue-400'>Checking blockchain...</p>";
+
+            try {
+                const res = await fetch(`${API}/verify?student_id=${student}&date=${toUnix(date)}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    box.innerHTML = `<p class="text-red-400">${data.error}</p>`;
+                    return;
+                }
+
+                const status = data.present
+                    ? "<span class='text-green-400 font-bold'>🟢 Present</span>"
+                    : "<span class='text-red-400 font-bold'>🔴 Absent</span>";
+
+                box.innerHTML = `
+                    <p><b>Status:</b> ${status}</p>
+                    <p><b>Name:</b> ${data.name}</p>
+                    <p><b>Reason Hash:</b> ${data.reasonHash}</p>
+                `;
+            } catch (err) {
+                swal("Error", err.message, "error");
+            }
+        }
+    </script>
+
+</body>
+
+</html>
